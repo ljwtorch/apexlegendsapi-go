@@ -132,12 +132,14 @@ var ErrPlayerNotFound = errors.New("apex: player lookup failed; check the Origin
 
 // APIError is returned for every non-2xx HTTP status, including undocumented ones.
 // It is also returned for a JSON Error response, even with a 2xx HTTP status.
-// Body and Header preserve the upstream response. Error omits the body and URL so
-// it cannot accidentally print an API key reflected in either of those fields.
+// Body and Header preserve the upstream response. Error includes the upstream
+// JSON Error message, redacting the client's API key, but omits the full body
+// and request URL.
 type APIError struct {
 	StatusCode int
 	Header     http.Header
 	Body       []byte
+	apiKey     string
 }
 
 func (e *APIError) Error() string {
@@ -145,20 +147,28 @@ func (e *APIError) Error() string {
 	if e.StatusCode >= 200 && e.StatusCode < 300 {
 		message = fmt.Sprintf("apex: API reported an error with HTTP %d %s", e.StatusCode, http.StatusText(e.StatusCode))
 	}
-	if cause := e.Unwrap(); cause != nil {
+	if detail := apiErrorMessage(e.Body); detail != "" {
+		if e.apiKey != "" {
+			for _, key := range []string{e.apiKey, url.QueryEscape(e.apiKey), url.PathEscape(e.apiKey)} {
+				detail = strings.ReplaceAll(detail, key, "[redacted]")
+			}
+		}
+		message += ": " + strings.Join(strings.Fields(detail), " ")
+	} else if cause := e.Unwrap(); cause != nil {
 		message += ": " + strings.TrimPrefix(cause.Error(), "apex: ")
 	}
 	return message
 }
 
 // Unwrap classifies known upstream error responses independently of
-// its HTTP status. Unknown bodies are never included in the printable error.
+// its HTTP status.
 func (e *APIError) Unwrap() error {
 	if strings.TrimSpace(string(e.Body)) == "Error: API key doesn't exist !" {
 		return ErrAccessDenied
 	}
 	switch apiErrorMessage(e.Body) {
-	case "This API key doesn't exist or you are not allowed to access this data.":
+	case "This API key doesn't exist or you are not allowed to access this data.",
+		"Unauthorized. You must be whitelisted to use this API.":
 		return ErrAccessDenied
 	case "Player not found", "Player not found.", "Player not found. Please try again (err origin lookup)":
 		return ErrPlayerNotFound
@@ -215,7 +225,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values) (*Respo
 	body, readErr := io.ReadAll(resp.Body)
 	r := &Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: json.RawMessage(body)}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || apiErrorMessage(body) != "" {
-		apiErr := &APIError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: bytes.Clone(body)}
+		apiErr := &APIError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: bytes.Clone(body), apiKey: c.apiKey}
 		if readErr != nil {
 			return r, errors.Join(apiErr, fmt.Errorf("apex: read response: %w", readErr))
 		}

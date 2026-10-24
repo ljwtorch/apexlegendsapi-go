@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	apex "github.com/ljwtorch/apexlegendsapi-go"
 )
 
 func main() {
-	client, err := apex.NewClient(os.Getenv("APEX_API_KEY"))
+	client, err := apex.NewClient("85427f5704bb1e9293ca6c8e40257d3f")
 	if err != nil {
 		log.Fatal(err)
 	}

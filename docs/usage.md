@@ -89,7 +89,7 @@ fmt.Println(string(response.Body))
 
 已识别的上游权限错误可通过 `errors.Is(err, apex.ErrAccessDenied)` 判断；玩家查找失败可通过 `errors.Is(err, apex.ErrPlayerNotFound)` 判断。玩家查找失败也可能来自上游查找服务异常，不能仅凭该错误认定账号不存在。
 
-错误字符串省略响应正文和请求 URL；需要查看正文时请显式读取 `apiErr.Body`。原始正文和响应头可能包含服务方回显的数据，记录日志前应自行处理。网络错误、取消和超时保留原始错误链。
+错误字符串直接包含上游 JSON `Error` 字段的具体原因，并对客户端 API Key（含 URL 编码形式）脱敏；完整响应正文和请求 URL 不会自动输出。例如排行榜缺少白名单权限时，`log.Print(err)` 会输出 `apex: API reported an error with HTTP 200 OK: Unauthorized. You must be whitelisted to use this API.`，也可通过 `errors.Is(err, apex.ErrAccessDenied)` 判断。需要查看完整正文时请显式读取 `apiErr.Body`。原始正文和响应头可能包含服务方回显的数据，记录日志前应自行处理。网络错误、取消和超时保留原始错误链。
 
 ## 客户端配置
 
